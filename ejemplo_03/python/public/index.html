@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Laboratorio de Agentes - OpenAI & DeepSeek en Vivo</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    :root {
+      --primary: #1e3a8a;
+      --primary-hover: #1d4ed8;
+      --bg: #0b1120;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 18px; }
+
+    .container { max-width: 1250px; margin: 0 auto; display: grid; grid-template-columns: 430px 1fr; gap: 18px; }
+
+    header { grid-column: 1 / -1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 18px; color: #60a5fa; }
+    header p { font-size: 13px; color: var(--muted); }
+
+    .badge-provider { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .badge-openai { background: #065f46; color: #6ee7b7; border: 1px solid #059669; }
+    .badge-deepseek { background: #1e1b4b; color: #a5b4fc; border: 1px solid #4f46e5; }
+
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .card h2 { font-size: 14px; color: #93c5fd; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+    /* Proveedor Switch */
+    .provider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .provider-btn { background: #0f172a; border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 6px; cursor: pointer; text-align: center; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+    .provider-btn.active.openai { background: #065f46; border-color: #34d399; }
+    .provider-btn.active.deepseek { background: #3730a3; border-color: #818cf8; }
+
+    /* Botones de Casos */
+    .case-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .case-btn { background: #0f172a; border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 6px; cursor: pointer; text-align: left; font-size: 12px; transition: all 0.2s; }
+    .case-btn:hover { border-color: #60a5fa; }
+    .case-btn.active { border-color: #3b82f6; background: #1e40af; font-weight: 600; }
+    .case-btn span { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+    /* Parámetros */
+    .params-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; }
+    label { display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; }
+    input[type="number"], select, textarea { width: 100%; background: #0f172a; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-family: monospace; font-size: 12px; resize: vertical; }
+
+    /* Chat Area */
+    #chat { flex: 1; height: 490px; overflow-y: auto; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .msg { padding: 12px 14px; border-radius: 8px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .msg.user { background: #1e40af; align-self: flex-end; max-width: 80%; }
+    .msg.bot { background: #1e293b; border: 1px solid var(--border); align-self: flex-start; max-width: 90%; }
+    .msg.escalado { border-left: 4px solid #ef4444; background: #451a1a; }
+    pre { background: #0b1120; border: 1px solid var(--border); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 12px; color: #38bdf8; }
+
+    .input-box { display: flex; gap: 8px; }
+    .input-box textarea { height: 60px; }
+    .btn-primary { background: #2563eb; color: #fff; border: none; padding: 0 20px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #334155; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .btn-secondary:hover { background: #475569; }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div>
+      <h1>Laboratorio de Agentes IA • OpenAI vs DeepSeek</h1>
+      <p>Subindicador 3: Práctica en Vivo con Socket.IO y Streaming</p>
+    </div>
+    <div id="statusBadge" class="badge-provider badge-openai">
+      ● Proveedor: OpenAI (gpt-4o-mini)
+    </div>
+  </header>
+
+  <!-- PANEL IZQUIERDO -->
+  <div class="card">
+    <h2>1. Proveedor de LLM en Vivo</h2>
+    <div class="provider-grid">
+      <button class="provider-btn openai active" id="btnOpenAI" onclick="switchProvider('openai')">
+        🟢 OpenAI (ChatGPT API)
+      </button>
+      <button class="provider-btn deepseek" id="btnDeepSeek" onclick="switchProvider('deepseek')">
+        🔵 DeepSeek (V3 / R1)
+      </button>
+    </div>
+
+    <h2>2. Selecciona el Caso de Uso (Guía Didáctica)</h2>
+    <div class="case-selector">
+      <button class="case-btn active" onclick="selectCase(1)">
+        Caso 1: Soporte Tier 1
+        <span>Atención al Cliente & Guardrails</span>
+      </button>
+      <button class="case-btn" onclick="selectCase(2)">
+        Caso 2: Copywriter
+        <span>LinkedIn vs WhatsApp Business</span>
+      </button>
+      <button class="case-btn" onclick="selectCase(3)">
+        Caso 3: Extracción JSON
+        <span>RPA / Operaciones con JSON puro</span>
+      </button>
+      <button class="case-btn" onclick="selectCase(4)">
+        Caso 4: Minuta Ejecutiva
+        <span>Productividad & Matriz de Tareas</span>
+      </button>
+    </div>
+
+    <h2>3. Parámetros del Agente</h2>
+    <div class="params-grid">
+      <div>
+        <label>Modelo Seleccionado</label>
+        <select id="paramModel">
+          <!-- Opciones dinámicas según proveedor -->
+        </select>
+      </div>
+      <div>
+        <label>Temperatura (0.0 a 1.0)</label>
+        <input type="number" id="paramTemp" step="0.1" min="0" max="1" value="0.2" />
+      </div>
+      <div>
+        <label>Max Tokens</label>
+        <input type="number" id="paramMaxTokens" value="400" />
+      </div>
+      <div>
+        <label>Formato de Salida</label>
+        <select id="paramFormat">
+          <option value="text">Texto Libre (Markdown)</option>
+          <option value="json">JSON Objeto (json_object)</option>
+        </select>
+      </div>
+    </div>
+
+    <h2>4. System Prompt (Instrucciones)</h2>
+    <textarea id="systemPrompt" rows="8"></textarea>
+
+    <div class="toolbar">
+      <button class="btn-secondary" onclick="resetCurrentCase()">Restablecer Caso</button>
+      <button class="btn-secondary" onclick="clearChat()">Limpiar Chat</button>
+    </div>
+  </div>
+
+  <!-- PANEL DERECHO -->
+  <div class="card">
+    <div class="toolbar">
+      <h2>5. Interacción en Tiempo Real (Socket.IO + Streaming)</h2>
+      <button class="btn-secondary" onclick="loadPromptExample()">💡 Cargar Prompt de Prueba de la Guía</button>
+    </div>
+
+    <div id="chat"></div>
+
+    <div class="input-box">
+      <textarea id="inputMsg" placeholder="Escribe el mensaje del usuario aquí o usa 'Cargar Prompt de Prueba'..."></textarea>
+      <button class="btn-primary" id="sendBtn">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+
+  let currentProvider = "openai"; // "openai" o "deepseek"
+
+  const PROVIDER_MODELS = {
+    openai: [
+      { id: "gpt-4o-mini", label: "gpt-4o-mini (Rápido y económico)" },
+      { id: "gpt-4o", label: "gpt-4o (Avanzado)" }
+    ],
+    deepseek: [
+      { id: "deepseek-chat", label: "deepseek-chat (DeepSeek V3)" },
+      { id: "deepseek-reasoner", label: "deepseek-reasoner (DeepSeek R1)" }
+    ]
+  };
+
+  const CASOS = {
+    1: {
+      name: "Soporte al Cliente (Tier 1)",
+      temp: 0.2,
+      maxTokens: 400,
+      format: "text",
+      systemPrompt: `Eres "SoporteBot", el agente virtual de atención al cliente de "TecnoHogar Perú".
+Tu objetivo es resolver consultas de clientes con amabilidad, precisión y rapidez.
+
+POLÍTICAS DE LA EMPRESA:
+1. Envíos: Tardan de 24 a 48 horas en Lima Metropolitana y de 3 a 5 días hábiles en provincias.
+2. Devoluciones: Solo se aceptan dentro de los primeros 7 días naturales tras la recepción del producto, con empaque original intacto y boleta/factura.
+3. Productos en liquidación: NO tienen cambio ni devolución bajo ningún concepto.
+4. Soporte por falla de fábrica: Si presenta falla después del día 7, se deriva a la garantía oficial de la marca (1 año).
+
+REGLAS DE COMPORTAMIENTO:
+- Saluda con cortesía mencionando tu nombre ("SoporteBot").
+- Si el usuario pide devolución fuera del plazo de 7 días, explica la política con empatía pero firmeza.
+- Si el usuario insiste, está muy enfadado o amenaza con acciones legales, incluye exactamente el código: "[DERIVAR_A_HUMANO]" y solicita su número de pedido y teléfono de contacto.
+- No inventes descuentos ni excepciones no contempladas en las políticas.`,
+      userExample: `Hola, compré una licuadora hace 15 días y ya no me gusta el color. Quiero que me devuelvan mi dinero hoy mismo porque el empaque está intacto. Si no me solucionan ya, haré un reclamo en Indecopi.`
+    },
+    2: {
+      name: "Generador de Contenido Multicanal",
+      temp: 0.7,
+      maxTokens: 600,
+      format: "text",
+      systemPrompt: `Eres un Director de Comunicación y Copywriter Estratégico B2B para una empresa de automatización.
+Tu tarea es transformar noticias o lanzamientos en dos versiones de contenido publicable:
+
+CANAL 1: Publicación de LinkedIn
+- Tono: Profesional, reflexivo, enfocado en ROI y optimización de tiempo.
+- Estructura: Gancho inicial (hook), problema empresarial común, solución y llamado a la acción (CTA) con 3 hashtags.
+
+CANAL 2: Difusión de WhatsApp Business
+- Tono: Directo, dinámico y amigable.
+- Estructura: Saludo, beneficio clave en 2 líneas, 3 viñetas con emojis y enlace simulado para agendar demo.
+
+FORMATO: Separa ambas versiones con títulos Markdown claros.`,
+      userExample: `Acabamos de lanzar la integración entre WhatsApp y Google Sheets para que las cotizaciones se registren solas sin intervención humana. Ahorra 2 horas diarias a cada vendedor.`
+    },
+    3: {
+      name: "Extracción y Clasificación a JSON Estricto",
+      temp: 0.0,
+      maxTokens: 350,
+      format: "json",
+      systemPrompt: `Eres un motor de procesamiento de lenguaje natural y clasificación de tickets para el área de operaciones.
+Tu única función es analizar el mensaje del usuario y extraer la información en un JSON estricto, sin texto introductorio ni explicaciones adicionales.
+
+ESTRUCTURA EXACTA DEL JSON:
+{
+  "cliente_nombre": string o null,
+  "numero_pedido": string o null,
+  "categoria": "PAGOS" | "LOGISTICA" | "PRODUCTO_DEFECTUOSO" | "CONSULTA_GENERAL",
+  "monto_involucrado": number o null,
+  "nivel_urgencia": "BAJA" | "MEDIA" | "ALTA" | "CRITICA",
+  "sentimiento": "POSITIVO" | "NEUTRO" | "NEGATIVO" | "MUY_MOLESTO",
+  "resumen": string (máximo 12 palabras),
+  "accion_sugerida": string
+}`,
+      userExample: `Buenas tardes, soy Carlos Mendoza. Mi pedido es el #PE-89412. Compré ayer pagando con tarjeta pero me cobraron dos veces el monto de S/ 450 en mi cuenta bancaria. Necesito la devolución urgente del cobro duplicado porque no tengo para mi alquiler.`
+    },
+    4: {
+      name: "Productividad - Minuta Ejecutiva y Tareas",
+      temp: 0.3,
+      maxTokens: 500,
+      format: "text",
+      systemPrompt: `Eres un Gestor de Proyectos Ágil y Asistente de Operaciones de Alto Rendimiento.
+Tu función es recibir notas desordenadas o transcripciones de reuniones de trabajo y sintetizarlas en una "Minuta Ejecutiva de Acuerdos".
+
+ESTRUCTURA DE SALIDA OBLIGATORIA:
+1. Objetivo de la Reunión (1 sola frase precisa).
+2. Puntos Clave Tratados (máximo 3 viñetas).
+3. Matriz de Acciones (Tabla Markdown con columnas: Tarea, Responsable, Prioridad [Alta/Media/Baja], Fecha Límite).
+4. Próximo Hito de Seguimiento.`,
+      userExample: `Reunión con ventas y sistemas hoy a las 11am. Estuvieron Andrea, Juan y Miguel. La base de datos en Excel está duplicada y se pierden leads. Andrea dijo que puede limpiar la lista para este viernes. Juan va a cotizar HubSpot o Pipedrive pero necesita aprobación de gerencia a más tardar el martes 22. Miguel avisó que no toquen las integraciones actuales hasta que él revise la API el jueves 24. Volvemos a reunirnos el próximo miércoles a las 11am.`
+    }
+  };
+
+  let currentCaseId = 1;
+  let currentBotMsgElem = null;
+
+  function switchProvider(provider) {
+    currentProvider = provider;
+    document.getElementById('btnOpenAI').classList.toggle('active', provider === 'openai');
+    document.getElementById('btnDeepSeek').classList.toggle('active', provider === 'deepseek');
+
+    const badge = document.getElementById('statusBadge');
+    if (provider === 'openai') {
+      badge.className = 'badge-provider badge-openai';
+      badge.innerText = '● Proveedor: OpenAI (gpt-4o-mini)';
+    } else {
+      badge.className = 'badge-provider badge-deepseek';
+      badge.innerText = '● Proveedor: DeepSeek (deepseek-chat)';
+    }
+
+    // Actualizar selector de modelos
+    const modelSelect = document.getElementById('paramModel');
+    modelSelect.innerHTML = '';
+    PROVIDER_MODELS[provider].forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.innerText = m.label;
+      modelSelect.appendChild(opt);
+    });
+  }
+
+  function selectCase(caseNum) {
+    currentCaseId = caseNum;
+    document.querySelectorAll('.case-btn').forEach((btn, idx) => {
+      btn.classList.toggle('active', idx + 1 === caseNum);
+    });
+
+    const c = CASOS[caseNum];
+    document.getElementById('paramTemp').value = c.temp;
+    document.getElementById('paramMaxTokens').value = c.maxTokens;
+    document.getElementById('paramFormat').value = c.format;
+    document.getElementById('systemPrompt').value = c.systemPrompt;
+
+    clearChat();
+    socket.emit('set_case', { systemPrompt: c.systemPrompt });
+  }
+
+  function resetCurrentCase() {
+    selectCase(currentCaseId);
+  }
+
+  function loadPromptExample() {
+    document.getElementById('inputMsg').value = CASOS[currentCaseId].userExample;
+  }
+
+  function clearChat() {
+    document.getElementById('chat').innerHTML = '';
+    socket.emit('clear_history', { systemPrompt: document.getElementById('systemPrompt').value });
+  }
+
+  const chat = document.getElementById('chat');
+  const input = document.getElementById('inputMsg');
+  const btn = document.getElementById('sendBtn');
+
+  btn.addEventListener('click', () => {
+    const text = input.value.trim();
+    if (!text) return;
+
+    const userDiv = document.createElement('div');
+    userDiv.className = 'msg user';
+    userDiv.innerText = text;
+    chat.appendChild(userDiv);
+    input.value = '';
+
+    currentBotMsgElem = document.createElement('div');
+    currentBotMsgElem.className = 'msg bot';
+    chat.appendChild(currentBotMsgElem);
+    chat.scrollTop = chat.scrollHeight;
+
+    const data = {
+      text,
+      provider: currentProvider,
+      model: document.getElementById('paramModel').value,
+      systemPrompt: document.getElementById('systemPrompt').value,
+      temperature: document.getElementById('paramTemp').value,
+      maxTokens: document.getElementById('paramMaxTokens').value,
+      isJson: document.getElementById('paramFormat').value === 'json'
+    };
+
+    socket.emit('user_message', data);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      btn.click();
+    }
+  });
+
+  socket.on('stream_chunk', (data) => {
+    if (currentBotMsgElem) {
+      currentBotMsgElem.innerText += data.delta;
+      chat.scrollTop = chat.scrollHeight;
+    }
+  });
+
+  socket.on('stream_end', (data) => {
+    if (data.escalado && currentBotMsgElem) {
+      currentBotMsgElem.classList.add('escalado');
+    }
+    if (data.isJson) {
+      try {
+        const parsed = JSON.parse(data.fullText);
+        currentBotMsgElem.innerHTML = `<pre>${JSON.stringify(parsed, null, 2)}</pre>`;
+      } catch (e) {}
+    }
+    currentBotMsgElem = null;
+  });
+
+  socket.on('stream_error', (data) => {
+    if (currentBotMsgElem) {
+      currentBotMsgElem.innerText += `\n[Error con ${currentProvider.toUpperCase()}: ${data.error}]`;
+    }
+  });
+
+  // Inicializar
+  switchProvider('openai');
+  selectCase(1);
+</script>
+</body>
+</html>

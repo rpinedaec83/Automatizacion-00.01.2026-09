@@ -1,0 +1,4 @@
+python-socketio[asyncio]
+uvicorn
+openai
+python-dotenv
